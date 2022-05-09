@@ -1,0 +1,557 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
+
+import numpy as np
+import pandas as pd
+import scanpy as sc
+import anndata as ad
+import matplotlib.pyplot as pl
+from matplotlib import rcParams
+
+
+# In[2]:
+
+
+sc.logging.print_header()
+
+
+# In[3]:
+
+
+ALP = sc.read_10x_mtx(
+    'D:/Users/Bioinfo-Eq1/Desktop/Dossier_Flo/Dossier_Joseph/Sujet/Data/ALP/',
+    var_names='gene_symbols',                
+    cache=True)  
+
+
+# In[4]:
+
+
+ILC = sc.read_10x_mtx(
+    'D:/Users/Bioinfo-Eq1/Desktop/Dossier_Flo/Dossier_Joseph/Sujet/Data/ILCpro_WT/',
+    var_names='gene_symbols',                
+    cache=True)
+
+
+# In[5]:
+
+
+Tulip = sc.read_10x_mtx(
+    'D:/Users/Bioinfo-Eq1/Desktop/Dossier_Flo/Dossier_Joseph/Sujet/Data/Tulip/',  
+    var_names='gene_symbols',
+    cache=True)
+
+
+# In[6]:
+
+
+data = {"ALP":ad.AnnData(ALP),  "ILC":ad.AnnData(ILC), "Tulip":ad.AnnData(Tulip)}
+
+
+# In[7]:
+
+
+data = ad.concat(data, label="dataset")
+
+
+# In[8]:
+
+
+data.obs
+
+
+# In[9]:
+
+
+data.var
+
+
+# In[10]:
+
+
+data.shape
+
+
+# In[11]:
+
+
+#Filtre et CQ
+
+
+# In[12]:
+
+
+sc.pp.filter_cells(data, min_genes=200) #se débarrasser des cellules avec moins de 200 gènes
+sc.pp.filter_genes(data, min_cells=3) #se débarrasser des gènes qui se trouvent dans moins de 3 cellules
+
+
+# In[13]:
+
+
+data.var['mt'] = data.var_names.str.startswith('mt-')  # annoter le groupe de gènes mitochondriaux en 'mt'
+
+
+# In[14]:
+
+
+sc.pp.calculate_qc_metrics(data, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
+
+
+# In[15]:
+
+
+sc.pl.violin(data, ['n_genes_by_counts', 'total_counts', 'pct_counts_mt'], groupby = 'dataset', jitter=0.4, multi_panel=True, save='data.png')
+
+
+# In[16]:
+
+
+data = data[data.obs.n_genes_by_counts < 4000, :]
+data = data[data.obs.pct_counts_mt < 4, :]
+data = data[data.obs.total_counts < 14000, :]
+
+
+# In[17]:
+
+
+sc.pl.violin(data, ['n_genes_by_counts', 'total_counts', 'pct_counts_mt'], groupby = 'dataset', jitter=0.4, multi_panel=True, save='datafilter.png')
+
+
+# In[18]:
+
+
+data.shape
+
+
+# In[19]:
+
+
+#Traitement des données
+
+
+# In[20]:
+
+
+sc.pp.log1p(data)
+
+
+# In[21]:
+
+
+sc.pp.normalize_total(data)
+
+
+# In[22]:
+
+
+sc.pp.scale(data)
+
+
+# In[23]:
+
+
+sc.pp.regress_out(data, ['total_counts', 'pct_counts_mt'])
+
+
+# In[24]:
+
+
+sc.tl.pca(data)
+sc.pl.pca(data)
+
+
+# In[25]:
+
+
+sc.pl.pca_variance_ratio(data, log=True, save='dataratio.png')
+
+
+# In[26]:
+
+
+sc.pp.neighbors(data, n_neighbors=20, n_pcs=15)
+
+
+# In[27]:
+
+
+sc.tl.draw_graph(data)
+sc.pl.draw_graph(data, color='dataset', legend_loc='on data', save='voisins.png')
+
+
+# In[28]:
+
+
+sc.tl.umap(data)
+sc.pl.umap(data, color=['dataset'], legend_loc='on data', save='voisins.png')
+
+
+# In[29]:
+
+
+#Clustering
+
+
+# In[30]:
+
+
+#Louvain
+
+
+# In[31]:
+
+
+sc.tl.louvain(data, resolution = 0.25)
+
+
+# In[32]:
+
+
+sc.tl.draw_graph(data)
+sc.pl.draw_graph(data, color=['louvain'], legend_loc='on data', save = 'data_louvain.png')
+
+
+# In[33]:
+
+
+sc.tl.umap(data)
+sc.pl.umap(data, color=['louvain'], legend_loc='on data', save = 'data_louvain.png')
+
+
+# In[34]:
+
+
+#Leiden
+
+
+# In[35]:
+
+
+sc.tl.leiden(data, resolution = 0.25)
+
+
+# In[36]:
+
+
+sc.tl.draw_graph(data)
+sc.pl.draw_graph(data, color=['leiden'], legend_loc='on data', save = 'data_leiden.png')
+
+
+# In[37]:
+
+
+sc.tl.umap(data)
+sc.pl.umap(data, color=['leiden'], legend_loc='on data', save = 'data_louvain.png')
+
+
+# In[38]:
+
+
+sc.tl.rank_genes_groups(data, groupby='dataset', method='logreg')
+
+
+# In[39]:
+
+
+result_data = data.uns['rank_genes_groups']
+groups_data = result_data['names'].dtype.names
+pd.DataFrame(
+    {group + '_' + key[:1]: result_data[key][group]
+    for group in groups_data for key in ['names', 'scores']}).head(10)
+
+
+# In[40]:
+
+
+tmp_data = pd.crosstab(data.obs['louvain'],data.obs['dataset'], normalize='index')
+tmp_data.plot.bar(stacked=True).legend(loc='upper right')
+
+
+# In[41]:
+
+
+#Elimination des outliers
+
+
+# In[42]:
+
+
+sc.tl.rank_genes_groups(data, groupby='louvain', method='logreg')
+data_frame = pd.DataFrame(data.uns['rank_genes_groups']['names']).head(10)
+data_frame
+
+
+# In[43]:
+
+
+new = data[~data.obs['louvain'].isin(['4', '5', '6']),:]
+
+
+# In[44]:
+
+
+new.shape
+
+
+# In[45]:
+
+
+#2e étape de clustering
+
+
+# In[46]:
+
+
+sc.tl.pca(new)
+sc.pl.pca(new)
+
+
+# In[47]:
+
+
+sc.pl.pca_variance_ratio(new, log=True, save='newratio.png' )
+
+
+# In[48]:
+
+
+sc.pp.neighbors(new, n_neighbors=20, n_pcs=10)
+
+
+# In[49]:
+
+
+sc.tl.louvain(new, resolution = 1.5)
+
+
+# In[50]:
+
+
+sc.tl.draw_graph(new)
+sc.pl.draw_graph(new, color=['louvain', 'dataset'], legend_loc='on data', save='new_louvain.png')
+
+
+# In[51]:
+
+
+sc.tl.umap(new)
+sc.pl.umap(new, color=['louvain', 'dataset'], legend_loc='on data', save='new_louvain.png')
+
+
+# In[52]:
+
+
+sc.pl.draw_graph(new, color=['Flt3', 'Nfil3', 'Tcf7'], save = 'new_gene.png')
+
+
+# In[53]:
+
+
+sc.pl.umap(new, color=['Flt3', 'Nfil3', 'Tcf7'], save = 'new_gene.png')
+
+
+# In[54]:
+
+
+#PAGA
+
+
+# In[55]:
+
+
+sc.tl.paga(new, groups='louvain')
+sc.pl.paga(new, threshold=0.03, save='new_louvain.png')
+
+
+# In[56]:
+
+
+sc.tl.draw_graph(new, init_pos='paga')
+sc.pl.draw_graph(new, color=['louvain', 'dataset'], legend_loc='on data', save='new_louvainpaga.png')
+
+
+# In[57]:
+
+
+sc.tl.umap(new, init_pos='paga')
+sc.pl.umap(new, color=['louvain', 'dataset'], legend_loc='on data', save='new_louvainpaga.png')
+
+
+# In[58]:
+
+
+sc.pl.paga_compare(
+    new, threshold=0.3, title='', right_margin=0.2, size=10, edge_width_scale=0.5,
+    legend_fontsize=12, fontsize=12, frameon=False, edges=True, save='new.png')
+
+
+# In[59]:
+
+
+sc.tl.rank_genes_groups(new, 'louvain', method='logreg')
+data_frame_new = pd.DataFrame(new.uns['rank_genes_groups']['names']).head(10)
+data_frame_new
+
+
+# In[60]:
+
+
+sc.pl.draw_graph(new, color=['Flt3', 'Nfil3', 'Tcf7'], save = 'new_gene.png')
+
+
+# In[61]:
+
+
+sc.pl.umap(new, color=['Flt3', 'Nfil3', 'Tcf7'], save = 'new_gene.png')
+
+
+# In[62]:
+
+
+sc.pl.draw_graph(new, color=['Smpd3', 'mt-Atp8', 'H2afy'])
+sc.pl.umap(new, color=['Smpd3', 'mt-Atp8', 'H2afy'])
+
+
+# In[63]:
+
+
+#Carte de diffusion
+
+
+# In[64]:
+
+
+sc.tl.diffmap(new)
+sc.pl.diffmap(new, color=['Flt3', 'Nfil3', 'Cd74', 'Tcf7'], save='diff.png')
+
+
+# In[65]:
+
+
+#Pseudo-temps
+
+
+# In[66]:
+
+
+new.uns['iroot'] = np.flatnonzero(new.obs['louvain']  == '1')[0] #on choisit une cellule racine pour le pseudo-temps de diffusion
+
+
+# In[67]:
+
+
+gene_names = ['Flt3', 'Dntt', 'H2afy', 'Egfl7', 'Irf8', 'Nusap1', 'Rrm2', 'Spi1', 'Il7r', 'Slpi', 'Nfil3', 'Srm', 'H2-Aa', 'Cd74', 'Cd7', 'Smpd3', 'mt-Atp8', 'Tox', 'Tcf7', 'Trbc1', 'Tox2', 'Runx3', 'Lmo4', 'Bcl11b', 'Id2'] #on choisit une liste de gènes
+
+
+# In[68]:
+
+
+sc.tl.dpt(new)
+
+
+# In[69]:
+
+
+sc.pl.draw_graph(new, color=['louvain', 'dataset', 'dpt_pseudotime'], legend_loc='on data', save = 'new_pseudo.png')
+sc.pl.umap(new, color=['louvain', 'dataset', 'dpt_pseudotime'], legend_loc='on data', save = 'new_pseudo.png')
+
+
+# In[70]:
+
+
+sc.pl.draw_graph(new, color=['Nfil3', 'dpt_pseudotime', 'Cd74'], legend_loc='on data', save = 'new_pseudogenesCD.png')
+sc.pl.umap(new, color=['Nfil3', 'dpt_pseudotime', 'Cd74'], legend_loc='on data', save = 'new_pseudogenesCD.png')
+
+
+# In[71]:
+
+
+sc.pl.draw_graph(new, color=['Flt3', 'dpt_pseudotime', 'Tcf7'], legend_loc='on data', save = 'new_pseudogenes.png')
+sc.pl.umap(new, color=['Flt3', 'dpt_pseudotime', 'Tcf7'], legend_loc='on data', save = 'new_pseudogenes.png')
+
+
+# In[72]:
+
+
+sc.tl.rank_genes_groups(new, groupby='dataset', method='logreg')
+
+
+# In[73]:
+
+
+result_new = new.uns['rank_genes_groups']
+groups_new = result_new['names'].dtype.names
+pd.DataFrame(
+    {group + '_' + key[:1]: result_new[key][group]
+    for group in groups_new for key in ['names', 'scores']}).head(10)
+
+
+# In[74]:
+
+
+tmp_new = pd.crosstab(new.obs['louvain'],new.obs['dataset'], normalize='index')
+tmp_new.plot.bar(stacked=True).legend(loc='upper right')
+
+
+# In[75]:
+
+
+sc.pl.heatmap(new, gene_names, groupby='dataset', show_gene_labels=True, swap_axes=True, dendrogram=True, save='new_heatmap.png')
+
+
+# In[76]:
+
+
+sc.tl.paga(new, groups='dataset')
+
+
+# In[77]:
+
+
+sc.pl.paga_path(new, nodes=['ALP'], keys=gene_names, save='new_heatmapALP.png')
+sc.pl.paga_path(new, nodes=['Tulip'], keys=gene_names, save='new_heatmapTulip.png')
+sc.pl.paga_path(new, nodes=['ILC'], keys=gene_names, save='new_heatmapILC.png')
+
+
+# In[78]:
+
+
+#Comparer à un seul cluster
+
+
+# In[79]:
+
+
+sc.tl.rank_genes_groups(new, 'louvain', groups=['3'], reference='1', method='logreg')
+sc.pl.rank_genes_groups(new, groups=['3'], n_genes=20)
+
+
+# In[80]:
+
+
+sc.pl.rank_genes_groups_violin(new, groups='3', n_genes=20)
+
+
+# In[81]:
+
+
+#comparer un gène particulier entre les goupes
+
+
+# In[82]:
+
+
+sc.pl.violin(new, ['Il7r', 'Nfil3', 'Smpd3'], groupby='dataset', save='new.png')
+
+
+# In[83]:
+
+
+sc.pl.violin(new, ['Dntt', 'Cd74', 'Tox'], groupby='dataset', save='new.png')
+
+
+# In[ ]:
+
