@@ -331,14 +331,14 @@ sc.tl.louvain(new, resolution = 1.5)
 
 
 sc.tl.draw_graph(new)
-sc.pl.draw_graph(new, color=['louvain', 'dataset'], legend_loc='on data', save='new_louvain.png')
+sc.pl.draw_graph(new, color=['louvain', 'dataset', 'Nfil3'], legend_loc='on data', save='new_louvain.png')
 
 
 # In[51]:
 
 
 sc.tl.umap(new)
-sc.pl.umap(new, color=['louvain', 'dataset'], legend_loc='on data', save='new_louvain.png')
+sc.pl.umap(new, color=['louvain', 'dataset', 'Nfil3'], legend_loc='on data', save='new_louvain.png')
 
 
 # In[52]:
@@ -425,7 +425,7 @@ sc.pl.umap(new, color=['Smpd3', 'mt-Atp8', 'H2afy'])
 
 
 sc.tl.diffmap(new)
-sc.pl.diffmap(new, color=['Flt3', 'Nfil3', 'Cd74', 'Tcf7'], save='diff.png')
+sc.pl.diffmap(new, color=['Flt3', 'Cd74', 'Tcf7'], save='diff.png')
 
 
 # In[65]:
@@ -553,5 +553,27 @@ sc.pl.violin(new, ['Il7r', 'Nfil3', 'Smpd3'], groupby='dataset', save='new.png')
 sc.pl.violin(new, ['Dntt', 'Cd74', 'Tox'], groupby='dataset', save='new.png')
 
 
-# In[ ]:
+# In[84]:
+
+
+new.obs
+
+
+# In[85]:
+
+
+new.var
+
+
+# In [86]:
+
+
+sc.pl.diffmap(new, color=['dpt_pseudotime', 'dataset'], save='diffinal1.png')
+sc.pl.diffmap(new, color=['Srm', 'Nfil3', 'Il7r'], save='diffinal2.png')
+
+
+#In [87]:
+
+
+sc.pl.heatmap(new, gene_names, groupby=['dpt_pseudotime'], num_categories=4, swap_axes=True, save='heatmap_dpt.png')
 
